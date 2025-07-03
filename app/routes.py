@@ -12,10 +12,6 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/books", response_model=list[schemas.BookOut])
-def list_books(db: Session = Depends(get_db)):
-    return db.query(models.Book).all()
-
 @router.post("/books", response_model=schemas.BookOut)
 def add_book(book: schemas.BookCreate, db: Session = Depends(get_db)):
     db_book = models.Book(**book.model_dump())
@@ -29,7 +25,15 @@ def get_reviews(book_id: int, db: Session = Depends(get_db)):
     book = db.query(models.Book).filter(models.Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    return book.reviews
+    # Map each Review to ReviewOut
+    return [
+        schemas.ReviewOut(
+            id=review.id,
+            reviewer="",  # or set to a default or fetch if you add this field to the model
+            comment=review.review_text
+        )
+        for review in book.reviews
+    ]
 
 @router.post("/books/{book_id}/reviews", response_model=schemas.ReviewOut)
 def add_review(book_id: int, review: schemas.ReviewCreate, db: Session = Depends(get_db)):
@@ -38,13 +42,18 @@ def add_review(book_id: int, review: schemas.ReviewCreate, db: Session = Depends
         raise HTTPException(status_code=404, detail="Book not found")
     db_review = models.Review(
         book_id=book_id,
-        review_text=review.comment,  # map comment to review_text
-        rating=5  # or get from review if you add it to the schema
+        review_text=review.comment,
+        rating=5
     )
     db.add(db_review)
     db.commit()
     db.refresh(db_review)
-    return db_review
+    # Return a ReviewOut with the expected fields
+    return schemas.ReviewOut(
+        id=db_review.id,
+        reviewer=review.reviewer,
+        comment=review.comment
+    )
 
 @router.get("/books", response_model=list[schemas.BookOut])
 def get_books(db: Session = Depends(get_db)):
@@ -63,13 +72,29 @@ def get_books(db: Session = Depends(get_db)):
 
     # Cache miss or cache down, fetch from DB
     books = db.query(models.Book).all()
-    books_data = [schemas.BookOut.from_orm(b).dict() for b in books]
+    books_data = []
+    for b in books:
+        books_data.append(
+            schemas.BookOut(
+                id=b.id,
+                title=b.title,
+                author=b.author,
+                reviews=[
+                    schemas.ReviewOut(
+                        id=r.id,
+                        reviewer="",  # or r.reviewer if you add it to the model
+                        comment=r.review_text
+                    )
+                    for r in b.reviews
+                ]
+            )
+        )
 
     # Try to populate cache
     if cache:
         try:
             import json
-            cache.set(cache_key, json.dumps(books_data), ex=60)
+            cache.set(cache_key, json.dumps([book.model_dump() for book in books_data]), ex=60)
         except Exception:
             pass  # Cache is down
 
