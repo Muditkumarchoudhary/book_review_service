@@ -32,6 +32,7 @@ A FastAPI-based web service for managing books and their reviews, featuring:
 # 1. Clone the repository
 
 git clone https://github.com/Muditkumarchoudhary/book_review_service.git
+
 cd book_review_service
 
 
@@ -82,7 +83,7 @@ uvicorn app.main:app --reload
 
 pytest -v
 
-- Tests are in the `tests/` directory.
+- Tests are in the tests/ directory.
 - Includes unit tests for endpoints and an integration test for cache-miss.
 
 
